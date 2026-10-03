@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Particles</title>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script>
+// canvas fills the window with no page margin
+c.width=innerWidth;c.height=innerHeight;c.style.display='block';document.body.style.margin=0;
+// keep canvas matched to window size
+onresize=()=>{c.width=innerWidth;c.height=innerHeight};
+// webgl context
+g=c.getContext('webgl');
+// vertex shader: mouse rotation, perspective, depth-based size, click flash via e
+V=`attribute vec3 p;uniform float x,y,e;void main(){float a=x*.006,b=y*.006;float X=p.x*cos(a)-p.z*sin(a),Z=p.x*sin(a)+p.z*cos(a),Y=p.y*cos(b)-Z*sin(b);Z=p.y*sin(b)+Z*cos(b);gl_Position=vec4(X/Z*.35,Y/Z*.35,0,1);gl_PointSize=8./Z*(1.+e);}`,
+// fragment shader: colour comes from uniform r
+F=`precision mediump float;uniform vec3 r;void main(){gl_FragColor=vec4(r,1.);}`,
+// shader compile helper
+S=(s,t)=>{let q=g.createShader(t);g.shaderSource(q,s);g.compileShader(q);return q},
+P=g.createProgram();
+g.attachShader(P,S(V,35633));g.attachShader(P,S(F,35632));g.linkProgram(P);g.useProgram(P);
+// particle positions
+let a=[];for(let i=0;i<300;i++)a.push((Math.random()-.5)*8,(Math.random()-.5)*8,Math.random()*8+.5);
+// home positions, velocities, mouse pixels (m,n), mouse ndc (u,w), shift = attract (k)
+let h=a.slice(),v=a.map(()=>0),m=0,n=0,u=0,w=0,k=1;
+// particle buffer
+let b=g.createBuffer();g.bindBuffer(34962,b);g.bufferData(34962,new Float32Array(a),35044);
+let l=g.getAttribLocation(P,'p');g.enableVertexAttribArray(l);g.vertexAttribPointer(l,3,5126,0,0,0);
+let X=g.getUniformLocation(P,'x'),Y=g.getUniformLocation(P,'y'),E=g.getUniformLocation(P,'e'),A=new AudioContext(),e=0,O=g.getUniformLocation(P,'r');
+// default colour cyan
+g.uniform3f(O,0,1,1);
+// b = blue, g = green, r = red
+onkeydown=q=>{let T={b:[.2,.4,1],g:[0,1,0],r:[1,0,0]}[q.key];T&&g.uniform3f(O,...T)};
+// mouse rotates the field and drives per-particle repel (shift = attract)
+onmousemove=q=>{m=q.clientX-innerWidth/2;n=q.clientY-innerHeight/2;u=q.clientX/innerWidth*2-1;w=1-q.clientY/innerHeight*2;k=q.shiftKey?-1:1;g.uniform1f(X,m);g.uniform1f(Y,n)};
+// click: 3D explosion impulse, flash, spatialised sound at the cursor
+onclick=()=>{
+// enter full screen on first click
+document.fullscreenElement||document.documentElement.requestFullscreen();
+A.resume();
+let o=A.createOscillator(),h=A.createGain(),N=A.createPanner(),t=A.currentTime;
+N.panningModel='HRTF';N.positionX.value=u*4;N.positionY.value=w*2;N.positionZ.value=-2;
+o.frequency.setValueAtTime(300,t);o.frequency.exponentialRampToValueAtTime(50,t+.3);
+h.gain.setValueAtTime(.2,t);h.gain.exponentialRampToValueAtTime(.001,t+.3);
+o.connect(h).connect(N).connect(A.destination);o.start();o.stop(t+.3);
+// push every particle outward from the cube centre with random speed
+for(let i=0;i<300;i++){let j=i*3,dx=a[j],dy=a[j+1],dz=a[j+2]-4.5,L=Math.hypot(dx,dy,dz)||1,s=Math.random()*.15+.1;v[j]+=dx/L*s;v[j+1]+=dy/L*s;v[j+2]+=dz/L*s}
+e=1};
+function R(){
+// flash decay
+e*=.94;
+// current view rotation, same maths as the shader
+let r=m*.006,s=n*.006,C=Math.cos(r),D=Math.sin(r),G=Math.cos(s),H=Math.sin(s);
+for(let i=0;i<300;i++){
+let j=i*3;
+// spring back to home plus gravity
+v[j]+=(h[j]-a[j])*.003;v[j+1]+=(h[j+1]-a[j+1])*.003-.004;v[j+2]+=(h[j+2]-a[j+2])*.003;
+// project particle to screen and compare with the mouse
+let X1=a[j]*C-a[j+2]*D,Z1=a[j]*D+a[j+2]*C,Yv=a[j+1]*G-Z1*H,Zv=a[j+1]*H+Z1*G,dx=X1/Zv*.35-u,dy=Yv/Zv*.35-w,q=dx*dx+dy*dy;
+// individual repel/attract force, rotated back to world space
+if(q<.05&&q>1e-6){let f=k*(.05-q)/Math.sqrt(q),fx=dx*f,fy=dy*f;v[j]+=fx*C-fy*H*D;v[j+1]+=fy*G;v[j+2]+=-fx*D-fy*H*C}
+// particle-particle collisions: soft push apart
+for(let o=i+1;o<300;o++){let p=o*3,ex=a[j]-a[p],ey=a[j+1]-a[p+1],ez=a[j+2]-a[p+2],d=ex*ex+ey*ey+ez*ez;if(d<.16&&d>1e-6){d=.02/Math.sqrt(d);v[j]+=ex*d;v[j+1]+=ey*d;v[j+2]+=ez*d;v[p]-=ex*d;v[p+1]-=ey*d;v[p+2]-=ez*d}}
+}
+// integrate with drag, bounce off the floor
+for(let j=0;j<900;j++){v[j]*=.985;a[j]+=v[j]}
+for(let j=1;j<900;j+=3)if(a[j]<-4){a[j]=-4;v[j]*=-.6}
+g.viewport(0,0,c.width,c.height);g.clearColor(0,0,0,1);g.clear(16384);
+g.uniform1f(E,e);
+// draw particles
+g.bindBuffer(34962,b);g.bufferData(34962,new Float32Array(a),35044);g.vertexAttribPointer(l,3,5126,0,0,0);g.drawArrays(0,0,300);
+requestAnimationFrame(R)}
+R()
+</script>
+</body>
+</html>
